@@ -9,28 +9,31 @@ var HoneywellTotalConnectSecurity = module.exports = function() {
 
   this._soap = arguments[0];
 
-  this.locationID = arguments[1].LocationID;
+  this.LocationID = arguments[1].LocationID;
 
   var device = arguments[2];
-  this.deviceID = device.DeviceID;
-  this.deviceName = device.DeviceName;
-  this.deviceSerialNumber = device.DeviceSerialNumber;
+  this._setProperties(device);
 
-  var flags = device.DeviceFlags.split(',');
-  for (i=0; i<flags.length; i++) {
-    var flagKeyValue = flags[i].split('=');
-    var key = flagKeyValue[0].charAt(0).toLowerCase() + flagKeyValue[0].slice(1);
-    this[key] = flagKeyValue[1];
-  }
-
-  this.isInACLoss = null;
-  this.isInLowBattery = null;
+  this.IsInACLoss = null;
+  this.IsInLowBattery = null;
 
   this._lastUpdatedTimestampTicks = 621355968000000000;
   this._lastSequenceNumber = 0;
   this._suppressUpdates = false;
 };
 util.inherits(HoneywellTotalConnectSecurity, Device);
+
+HoneywellTotalConnectSecurity.prototype._setProperties = function(device) {
+  this.DeviceID = device.DeviceID;
+  this.DeviceName = device.DeviceName;
+  this.DeviceSerialNumber = device.DeviceSerialNumber;
+
+  var flags = device.DeviceFlags.split(',');
+  for (i=0; i<flags.length; i++) {
+    var flagKeyValue = flags[i].split('=');
+    this[flagKeyValue[0]] = flagKeyValue[1];
+  }
+}
 
 // TODO: check the actual status of the panel then set current state
 HoneywellTotalConnectSecurity.prototype.init = function(config) {
@@ -42,8 +45,13 @@ HoneywellTotalConnectSecurity.prototype.init = function(config) {
   // ArmingState: 10307 -> Arming (Stay & Away)
   // ArmingState: 10308 -> Disarming
   
+  var armingFields = [];
+  if (1 === Number(this.PromptForUserCode)) {
+    armingFields = [{name: 'UserCode', type: 'text'}];
+  }
+  
   config
-    .name(this.deviceName)
+    .name(this.DeviceName)
     .type('security')
     .when(null, {allow: ['update-state']})
     .when('disarmed', {allow: ['arm-stay', 'arm-away', 'update-state']})
@@ -51,9 +59,9 @@ HoneywellTotalConnectSecurity.prototype.init = function(config) {
     .when('armed-away', {allow: ['disarm', 'update-state']})
     .when('arming', {allow: ['update-state']})
     .when('disarming', {allow: ['update-state']})
-    .map('arm-stay', this.armStay)
-    .map('arm-away', this.armAway)
-    .map('disarm', this.disarm)
+    .map('arm-stay', this.armStay, armingFields)
+    .map('arm-away', this.armAway, armingFields)
+    .map('disarm', this.disarm, armingFields)
     .map('update-state', this.updateState, [{name: 'newState', type: 'text'}]);
     
     this._getPanelMetaDataAndFullStatusByDeviceID();
@@ -89,7 +97,7 @@ HoneywellTotalConnectSecurity.prototype._setArmingState = function(armingState) 
 
 HoneywellTotalConnectSecurity.prototype._getPanelMetaDataAndFullStatusByDeviceID = function() {
   console.log('_getPanelMetaDataAndFullStatusByDeviceID this._lastSequenceNumber: ' + this._lastSequenceNumber);
-  this._soap._getPanelMetaDataAndFullStatusByDeviceID(this.deviceID, this._lastUpdatedTimestampTicks, this._lastSequenceNumber, this._getPanelMetaDataAndFullStatusByDeviceIDCallback.bind(this));
+  this._soap._getPanelMetaDataAndFullStatusByDeviceID(this.DeviceID, this._lastUpdatedTimestampTicks, this._lastSequenceNumber, this._getPanelMetaDataAndFullStatusByDeviceIDCallback.bind(this));
   this._lastUpdatedTimestampTicks = this._soap._ticks();
 }
 
@@ -106,8 +114,8 @@ HoneywellTotalConnectSecurity.prototype._getPanelMetaDataAndFullStatusByDeviceID
 
     var attributes = result.GetPanelMetaDataAndFullStatusByDeviceIDResult.PanelMetadataAndStatus.attributes;
     this._lastSequenceNumber = attributes.ConfigurationSequenceNumber;
-    this.isInACLoss = attributes.IsInACLoss;
-    this.isInLowBattery = attributes.IsInLowBattery;
+    this.IsInACLoss = attributes.IsInACLoss;
+    this.IsInLowBattery = attributes.IsInLowBattery;
 
     var armingState = result.GetPanelMetaDataAndFullStatusByDeviceIDResult.PanelMetadataAndStatus.Partitions.PartitionInfo[0].ArmingState;
     console.log('metadataAndFull armingState: ' + armingState);
@@ -124,7 +132,7 @@ HoneywellTotalConnectSecurity.prototype._getPanelMetaDataAndFullStatusByDeviceID
 
 HoneywellTotalConnectSecurity.prototype._getPanelFullStatusByDeviceID = function() {
   console.log('_getPanelFullStatusByDeviceID this._lastSequenceNumber: ' + this._lastSequenceNumber);
-  this._soap._getPanelFullStatusByDeviceID(this.deviceID, this._lastUpdatedTimestampTicks, this._lastSequenceNumber, this._getPanelFullStatusByDeviceIDCallback.bind(this));
+  this._soap._getPanelFullStatusByDeviceID(this.DeviceID, this._lastUpdatedTimestampTicks, this._lastSequenceNumber, this._getPanelFullStatusByDeviceIDCallback.bind(this));
   this._lastUpdatedTimestampTicks = this._soap._ticks();
 }
 
@@ -139,8 +147,8 @@ HoneywellTotalConnectSecurity.prototype._getPanelFullStatusByDeviceIDCallback = 
   case 0:
     var attributes = result.GetPanelFullStatusByDeviceIDResult.PanelStatus.attributes;
     this._lastSequenceNumber = attributes.ConfigurationSequenceNumber;
-    this.isInACLoss = attributes.IsInACLoss;
-    this.isInLowBattery = attributes.IsInLowBattery;
+    this.IsInACLoss = attributes.IsInACLoss;
+    this.IsInLowBattery = attributes.IsInLowBattery;
     
     var armingState = result.GetPanelFullStatusByDeviceIDResult.PanelStatus.Partitions.PartitionInfo[0].ArmingState;
     this._setArmingState(armingState);
@@ -166,9 +174,19 @@ HoneywellTotalConnectSecurity.prototype.updateState = function(newState, cb) {
   }
 }
 
-HoneywellTotalConnectSecurity.prototype.armStay = function(cb) {
+HoneywellTotalConnectSecurity.prototype.armStay = function() {
   this._suppressUpdates = true;
   
+  var cb = null;
+  var userCode = null;
+
+  if (typeof arguments[0] === 'function') {
+    cb = arguments[0];
+  } else {
+    userCode = arguments[0]
+    cb = arguments[1];
+  }
+
   console.log('armStay');
   
   var self = this;
@@ -178,14 +196,19 @@ HoneywellTotalConnectSecurity.prototype.armStay = function(cb) {
   cb();
 
   console.log('this._soap._sessionID: ' + this._soap._sessionID);
-  console.log('this.locationID: ' + this.locationID);
-  console.log('this.deviceID: ' + this.deviceID);
+  console.log('this.LocationID: ' + this.LocationID);
+  console.log('this.DeviceID: ' + this.DeviceID);
+  
+  if (Number(userCode) <= 0 ) {
+    userCode = -1;
+  }
+  
   this._soap._client.ArmSecuritySystem({
     SessionID: this._soap._sessionID,
-    LocationID: this.locationID,
-    DeviceID: this.deviceID,
+    LocationID: this.LocationID,
+    DeviceID: this.DeviceID,
     ArmType: 1,
-    UserCode: -1
+    UserCode: userCode
   }, function(err, result, raw, soapHeader) {
     // TODO: handle err
     console.log('armStay: ' + util.inspect(result));
@@ -206,8 +229,18 @@ HoneywellTotalConnectSecurity.prototype.armStay = function(cb) {
   
 }
 
-HoneywellTotalConnectSecurity.prototype.armAway = function(cb) {
+HoneywellTotalConnectSecurity.prototype.armAway = function() {
   this._suppressUpdates = true;
+
+  var cb = null;
+  var userCode = null;
+
+  if (typeof arguments[0] === 'function') {
+    cb = arguments[0];
+  } else {
+    userCode = arguments[0]
+    cb = arguments[1];
+  }
 
   console.log('armAway');
 
@@ -217,12 +250,16 @@ HoneywellTotalConnectSecurity.prototype.armAway = function(cb) {
   this.state = 'arming';
   cb();
 
+  if (Number(userCode) <= 0 ) {
+    userCode = -1;
+  }
+  
   this._soap._client.ArmSecuritySystem({
     SessionID: this._soap._sessionID,
-    LocationID: this.locationID,
-    DeviceID: this.deviceID,
+    LocationID: this.LocationID,
+    DeviceID: this.DeviceID,
     ArmType: 0,
-    UserCode: -1
+    UserCode: userCode
   }, function(err, result, raw, soapHeader) {
     // TODO: handle err
     console.log('armAway: ' + util.inspect(result));
@@ -242,8 +279,18 @@ HoneywellTotalConnectSecurity.prototype.armAway = function(cb) {
   });
 }
 
-HoneywellTotalConnectSecurity.prototype.disarm = function(cb) {
+HoneywellTotalConnectSecurity.prototype.disarm = function() {
   this._suppressUpdates = true;
+
+  var cb = null;
+  var userCode = null;
+
+  if (typeof arguments[0] === 'function') {
+    cb = arguments[0];
+  } else {
+    userCode = arguments[0]
+    cb = arguments[1];
+  }
 
   console.log('disarm');
   
@@ -253,11 +300,15 @@ HoneywellTotalConnectSecurity.prototype.disarm = function(cb) {
   this.state = 'disarming';
   cb();
   
+  if (Number(userCode) <= 0 ) {
+    userCode = -1;
+  }
+  
   this._soap._client.DisarmSecuritySystem({
     SessionID: this._soap._sessionID,
-    LocationID: this.locationID,
-    DeviceID: this.deviceID,
-    UserCode: -1
+    LocationID: this.LocationID,
+    DeviceID: this.DeviceID,
+    UserCode: userCode
   }, function(err, result, raw, soapHeader) {
     var resultCode = result.DisarmSecuritySystemResult.ResultCode;
     if (resultCode === 0) {
@@ -283,8 +334,8 @@ HoneywellTotalConnectSecurity.prototype._checkSecurityPanelLastCommandState = fu
   var self = this;
   this._soap._client.CheckSecurityPanelLastCommandState({
     SessionID: this._soap._sessionID,
-    LocationID: this.locationID,
-    DeviceID: this.deviceID,
+    LocationID: this.LocationID,
+    DeviceID: this.DeviceID,
     CommandCode: -1
   }, function(err, result, raw, soapHeader) {
     console.log('_checkSecurityPanelLastCommandState: ' + util.inspect(result));

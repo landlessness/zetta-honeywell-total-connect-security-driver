@@ -26,7 +26,7 @@ HoneywellTotalConnectSecurityScout.prototype.init = function(next) {
         (function(deviceLocation, securityDevice){
           console.log('deviceLocation.LocationID: ' +  deviceLocation.LocationID);
           console.log('securityDevice.DeviceID: ' + securityDevice.DeviceID);
-          var query = self.server.where({type: 'security', locationID: deviceLocation.LocationID, deviceID: securityDevice.DeviceID});
+          var query = self.server.where({type: 'security', LocationID: deviceLocation.LocationID, DeviceID: securityDevice.DeviceID});
           self.server.find(query, function(err, results) {
             if (results[0]) {
               self.provision(results[0], HoneywellTotalConnectSecurity, honeywellSoap, deviceLocation, securityDevice);

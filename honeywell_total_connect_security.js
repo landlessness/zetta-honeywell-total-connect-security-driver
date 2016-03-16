@@ -26,6 +26,7 @@ var HoneywellTotalConnectSecurity = module.exports = function() {
   this.isInACLoss = null;
   this.isInLowBattery = null;
 
+  this._timeout = null;
   this._lastUpdatedTimestampTicks = 621355968000000000;
   this._lastSequenceNumber = 0;
   
@@ -113,7 +114,7 @@ HoneywellTotalConnectSecurity.prototype._getPanelMetaDataAndFullStatusByDeviceID
     console.log('metadataAndFull armingState: ' + armingState);
     this._setArmingState(armingState);
     
-    setTimeout(this._getPanelFullStatusByDeviceID.bind(this), TIMEOUT);
+    this._timeout = setTimeout(this._getPanelFullStatusByDeviceID.bind(this), TIMEOUT);
     
     break;
   default:
@@ -146,7 +147,7 @@ HoneywellTotalConnectSecurity.prototype._getPanelFullStatusByDeviceIDCallback = 
     this._setArmingState(armingState);
     console.log('full armingState: ' + armingState);
 
-    setTimeout(this._getPanelFullStatusByDeviceID.bind(this), TIMEOUT);
+    this._timeout = setTimeout(this._getPanelFullStatusByDeviceID.bind(this), TIMEOUT);
     break;
   case 4002:
     this._getPanelMetaDataAndFullStatusByDeviceID();
@@ -163,6 +164,8 @@ HoneywellTotalConnectSecurity.prototype.updateState = function(newState, cb) {
 }
 
 HoneywellTotalConnectSecurity.prototype.armStay = function(cb) {
+  clearTimeout(this._timeout);
+
   console.log('armStay');
   
   var self = this;
@@ -183,19 +186,26 @@ HoneywellTotalConnectSecurity.prototype.armStay = function(cb) {
   }, function(err, result, raw, soapHeader) {
     // TODO: handle err
     console.log('armStay: ' + util.inspect(result));
-    if (result.ArmSecuritySystemResult.ResultCode >= 0) {
-      // self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-stay', callback: cb});
+    if (result.ArmSecuritySystemResult.ResultCode === 0) {
+      self.state = 'armed-stay';
+      cb();
+      self._timeout = setTimeout(self._getPanelFullStatusByDeviceID.bind(self), 2 * TIMEOUT);
+    } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
+      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-stay', callback: cb});
     } else {
       // log an err?
-      // self.state = previousState;
-      // cb();
-      console.log('armStay: ERROR: result.ArmSecuritySystemResult.ResultCode: ' + result.ArmSecuritySystemResult.ResultCode);
+      self.state = previousState;
+      cb();
+      self._timeout = setTimeout(self._getPanelFullStatusByDeviceID.bind(self), 2 * TIMEOUT);
+      console.log('armAway: ERROR: result.ArmSecuritySystemResult.ResultCode: ' + result.ArmSecuritySystemResult.ResultCode);
     }
   });
   
 }
 
 HoneywellTotalConnectSecurity.prototype.armAway = function(cb) {
+  clearTimeout(this._timeout);
+  
   console.log('armAway');
   
   var self = this;
@@ -214,20 +224,24 @@ HoneywellTotalConnectSecurity.prototype.armAway = function(cb) {
     // TODO: handle err
     console.log('armAway: ' + util.inspect(result));
     if (result.ArmSecuritySystemResult.ResultCode === 0) {
-      // self.state = 'armed-away';
-      // cb();
+      self.state = 'armed-away';
+      cb();
+      self._timeout = setTimeout(self._getPanelFullStatusByDeviceID.bind(self), 2 * TIMEOUT);
     } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
-      // self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-away', callback: cb});
+      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-away', callback: cb});
     } else {
       // log an err?
-      // self.state = previousState;
-      // cb();
+      self.state = previousState;
+      cb();
+      self._timeout = setTimeout(self._getPanelFullStatusByDeviceID.bind(self), 2 * TIMEOUT);
       console.log('armAway: ERROR: result.ArmSecuritySystemResult.ResultCode: ' + result.ArmSecuritySystemResult.ResultCode);
     }
   });
 }
 
 HoneywellTotalConnectSecurity.prototype.disarm = function(cb) {
+  clearTimeout(this._timeout);
+  
   console.log('disarm');
   
   var self = this;
@@ -244,14 +258,17 @@ HoneywellTotalConnectSecurity.prototype.disarm = function(cb) {
   }, function(err, result, raw, soapHeader) {
     var resultCode = result.DisarmSecuritySystemResult.ResultCode;
     if (resultCode === 0) {
+      console.log('result.DisarmSecuritySystemResult: ' + result.DisarmSecuritySystemResult);
       self.state = 'disarmed';
       cb();
+      self._timeout = setTimeout(self._getPanelFullStatusByDeviceID.bind(self), 2 * TIMEOUT);
     } else if (resultCode > 0) {
-      // self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'disarmed', callback: cb});
+      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'disarmed', callback: cb});
     } else {
       // log an err?
-      // self.state = previousState;
-      // cb();
+      self.state = previousState;
+      cb();
+      self._timeout = setTimeout(self._getPanelFullStatusByDeviceID.bind(self), 2 * TIMEOUT);
       console.log('disarm: ERROR: result.DisarmSecuritySystemResult.ResultCode: ' + result.DisarmSecuritySystemResult.ResultCode);
     }
   });
@@ -273,10 +290,12 @@ HoneywellTotalConnectSecurity.prototype._checkSecurityPanelLastCommandState = fu
     if (resultCode == 0) {
       self.state = arg.nextState;
       arg.callback();
+      self._timeout = setTimeout(self._getPanelFullStatusByDeviceID.bind(self), 2 * TIMEOUT);
       // success
     } else if (resultCode < 0 ) {
       self.state = arg.previousState;
       arg.callback();
+      self._timeout = setTimeout(self._getPanelFullStatusByDeviceID.bind(self), 2 * TIMEOUT);
       console.log(result.CheckSecurityPanelLastCommandStateResult.ResultData);
     } else {
       // TODO: handle err state and setting Zetta state

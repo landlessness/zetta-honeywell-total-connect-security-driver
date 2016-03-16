@@ -35,9 +35,8 @@ HoneywellTotalConnectSecurityScout.prototype.init = function(next) {
             }
           });
         })(deviceLocation, securityDevice);
-        next();
       }
     }
-
+    next();
   });
 }

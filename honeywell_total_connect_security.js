@@ -14,8 +14,8 @@ var HoneywellTotalConnectSecurity = module.exports = function() {
   var device = arguments[2];
   this.deviceID = device.DeviceID;
   this.deviceName = device.DeviceName;
-  
-  this.serialNumber = device.DeviceSerialNumber;
+  this.deviceSerialNumber = device.DeviceSerialNumber;
+
   var flags = device.DeviceFlags.split(',');
   for (i=0; i<flags.length; i++) {
     var flagKeyValue = flags[i].split('=');
@@ -207,8 +207,10 @@ HoneywellTotalConnectSecurity.prototype.armStay = function(cb) {
 }
 
 HoneywellTotalConnectSecurity.prototype.armAway = function(cb) {
+  this._suppressUpdates = true;
+
   console.log('armAway');
-  
+
   var self = this;
 
   var previousState = this.state;
@@ -241,6 +243,8 @@ HoneywellTotalConnectSecurity.prototype.armAway = function(cb) {
 }
 
 HoneywellTotalConnectSecurity.prototype.disarm = function(cb) {
+  this._suppressUpdates = true;
+
   console.log('disarm');
   
   var self = this;

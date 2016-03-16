@@ -215,14 +215,14 @@ HoneywellTotalConnectSecurity.prototype.armStay = function() {
     if (result.ArmSecuritySystemResult.ResultCode === 0) {
       self.state = 'armed-stay';
       cb();
-      this._suppressUpdates = false;
+      self._suppressUpdates = false;
     } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
       self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-stay', callback: cb});
     } else {
       // log an err?
       self.state = previousState;
       cb();
-      this._suppressUpdates = false;
+      self._suppressUpdates = false;
       console.log('armAway: ERROR: result.ArmSecuritySystemResult.ResultCode: ' + result.ArmSecuritySystemResult.ResultCode);
     }
   });
@@ -266,14 +266,14 @@ HoneywellTotalConnectSecurity.prototype.armAway = function() {
     if (result.ArmSecuritySystemResult.ResultCode === 0) {
       self.state = 'armed-away';
       cb();
-      this._suppressUpdates = false;
+      self._suppressUpdates = false;
     } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
       self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-away', callback: cb});
     } else {
       // log an err?
       self.state = previousState;
       cb();
-      this._suppressUpdates = false;
+      self._suppressUpdates = false;
       console.log('armAway: ERROR: result.ArmSecuritySystemResult.ResultCode: ' + result.ArmSecuritySystemResult.ResultCode);
     }
   });
@@ -315,14 +315,14 @@ HoneywellTotalConnectSecurity.prototype.disarm = function() {
       console.log('result.DisarmSecuritySystemResult: ' + result.DisarmSecuritySystemResult);
       self.state = 'disarmed';
       cb();
-      this._suppressUpdates = false;
+      self._suppressUpdates = false;
     } else if (resultCode > 0) {
       self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'disarmed', callback: cb});
     } else {
       // log an err?
       self.state = previousState;
       cb();
-      this._suppressUpdates = false;
+      self._suppressUpdates = false;
       console.log('disarm: ERROR: result.DisarmSecuritySystemResult.ResultCode: ' + result.DisarmSecuritySystemResult.ResultCode);
     }
   });
@@ -344,12 +344,12 @@ HoneywellTotalConnectSecurity.prototype._checkSecurityPanelLastCommandState = fu
     if (resultCode == 0) {
       self.state = arg.nextState;
       arg.callback();
-      this._suppressUpdates = false;
+      self._suppressUpdates = false;
       // success
     } else if (resultCode < 0 ) {
       self.state = arg.previousState;
       arg.callback();
-      this._suppressUpdates = false;
+      self._suppressUpdates = false;
       console.log(result.CheckSecurityPanelLastCommandStateResult.ResultData);
     } else {
       // TODO: handle err state and setting Zetta state

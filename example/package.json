@@ -10,6 +10,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "zetta-honeywell-total-connect-soap-driver": "~0.0.1",
     "node.extend": "^1.1.5",
     "zetta": "~1.0.0-beta.6"
   }

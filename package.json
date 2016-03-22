@@ -16,6 +16,10 @@
   },
   "devDependencies": {
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/landlessness/zetta-honeywell-total-connect-security-driver.git"
+  },
   "keywords": [
     "zetta",
     "honeywell",

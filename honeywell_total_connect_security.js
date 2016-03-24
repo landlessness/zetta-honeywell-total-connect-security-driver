@@ -1,18 +1,12 @@
-var Device = require('zetta-device');
+var HoneywellDevice = require('zetta-honeywell-total-connect-driver');
 var util = require('util');
 
 var TIMEOUT = 2000;
 var FAST_TIMEOUT = 500;
 
 var HoneywellTotalConnectSecurity = module.exports = function() {
-  Device.call(this);
-
-  this._soap = arguments[0];
-
-  this.LocationID = arguments[1].LocationID;
-
-  var device = arguments[2];
-  this._setProperties(device);
+  HoneywellDevice.call(this, arguments[0], arguments[1]);
+  this.LocationID = arguments[2].LocationID;
 
   this.IsInACLoss = null;
   this.IsInLowBattery = null;
@@ -21,19 +15,7 @@ var HoneywellTotalConnectSecurity = module.exports = function() {
   this._lastSequenceNumber = 0;
   this._suppressUpdates = false;
 };
-util.inherits(HoneywellTotalConnectSecurity, Device);
-
-HoneywellTotalConnectSecurity.prototype._setProperties = function(device) {
-  this.DeviceID = device.DeviceID;
-  this.DeviceName = device.DeviceName;
-  this.DeviceSerialNumber = device.DeviceSerialNumber;
-
-  var flags = device.DeviceFlags.split(',');
-  for (i=0; i<flags.length; i++) {
-    var flagKeyValue = flags[i].split('=');
-    this[flagKeyValue[0]] = flagKeyValue[1];
-  }
-}
+util.inherits(HoneywellTotalConnectSecurity, HoneywellDevice);
 
 // TODO: check the actual status of the panel then set current state
 HoneywellTotalConnectSecurity.prototype.init = function(config) {
@@ -280,6 +262,10 @@ HoneywellTotalConnectSecurity.prototype.armAway = function() {
 }
 
 HoneywellTotalConnectSecurity.prototype.disarm = function() {
+
+  console.log('_isValidSession (false): ' + this._isValidSession('1234'));
+  console.log('_isValidSession (true): ' + this._isValidSession(this._soap._sessionID));
+
   this._suppressUpdates = true;
 
   var cb = null;

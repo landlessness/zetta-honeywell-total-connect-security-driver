@@ -1,15 +1,14 @@
 {
   "name": "zetta-honeywell-total-connect-security-driver",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A Zetta driver for the Honeywell Total Connect Security Panel",
   "main": "index.js",
   "scripts": {
   },
   "license": "MIT",
   "dependencies": {
-    "soap": "0.13.0",
     "zetta-scout": "^0.6.0",
-    "zetta-device": "~0.18.0"
+    "zetta-honeywell-total-connect-driver": "^0.0.3"
   },
   "directories": {
     "example": "example"

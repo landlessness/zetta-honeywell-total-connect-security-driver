@@ -5,8 +5,7 @@ var TIMEOUT = 2000;
 var FAST_TIMEOUT = 500;
 
 var HoneywellTotalConnectSecurity = module.exports = function() {
-  HoneywellDevice.call(this, arguments[0], arguments[1]);
-  this.LocationID = arguments[2].LocationID;
+  HoneywellDevice.call(this, arguments[0], arguments[1], arguments[2].LocationID);
 
   this.IsInACLoss = null;
   this.IsInLowBattery = null;

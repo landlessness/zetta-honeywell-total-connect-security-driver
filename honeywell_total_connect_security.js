@@ -2,7 +2,6 @@ var HoneywellDevice = require('zetta-honeywell-total-connect-driver');
 var util = require('util');
 
 var TIMEOUT = 2000;
-var FAST_TIMEOUT = 500;
 
 var HoneywellTotalConnectSecurity = module.exports = function() {
   HoneywellDevice.call(this, arguments[0], arguments[1], arguments[2].LocationID);
@@ -12,7 +11,6 @@ var HoneywellTotalConnectSecurity = module.exports = function() {
 
   this._lastUpdatedTimestampTicks = 621355968000000000;
   this._lastSequenceNumber = 0;
-  this._suppressUpdates = false;
 };
 util.inherits(HoneywellTotalConnectSecurity, HoneywellDevice);
 
@@ -37,7 +35,7 @@ HoneywellTotalConnectSecurity.prototype.init = function(config) {
     .map('disarm', this.disarm, armingFields)
     .map('update-state', this.updateState, [{name: 'newState', type: 'text'}]);
     
-    this._getPanelMetaDataAndFullStatusByDeviceID();
+  this._getPanelMetaDataAndFullStatusByDeviceID();
 };
 
 HoneywellTotalConnectSecurity.prototype.armStay = function() {
@@ -45,7 +43,6 @@ HoneywellTotalConnectSecurity.prototype.armStay = function() {
   var resp = this._parseUserCode(arguments);
   var cb = resp[0];
   var userCode = resp[1];
-  this._suppressUpdates = true;
   this.state = 'arming';
   cb();
 
@@ -57,16 +54,9 @@ HoneywellTotalConnectSecurity.prototype.armStay = function() {
     ArmType: 1,
     UserCode: userCode
   }, function(err, result, raw, soapHeader) {
-    if (result.ArmSecuritySystemResult.ResultCode === 0) {
-      self.state = 'armed-stay';
-      cb();
-      self._suppressUpdates = false;
-    } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
-      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-stay', callback: cb});
-    } else {
+    if (result.ArmSecuritySystemResult.ResultCode < 0) {
       self.state = previousState;
       cb();
-      self._suppressUpdates = false;
     }
   });
   
@@ -77,7 +67,6 @@ HoneywellTotalConnectSecurity.prototype.armAway = function() {
   var resp = this._parseUserCode(arguments);
   var cb = resp[0];
   var userCode = resp[1];
-  this._suppressUpdates = true;
   this.state = 'arming';
   cb();
 
@@ -89,16 +78,9 @@ HoneywellTotalConnectSecurity.prototype.armAway = function() {
     ArmType: 0,
     UserCode: userCode
   }, function(err, result, raw, soapHeader) {
-    if (result.ArmSecuritySystemResult.ResultCode === 0) {
-      self.state = 'armed-away';
-      cb();
-      self._suppressUpdates = false;
-    } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
-      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-away', callback: cb});
-    } else {
+    if (result.ArmSecuritySystemResult.ResultCode < 0) {
       self.state = previousState;
       cb();
-      self._suppressUpdates = false;
     }
   });
 }
@@ -108,11 +90,10 @@ HoneywellTotalConnectSecurity.prototype.disarm = function() {
   var resp = this._parseUserCode(arguments);
   var cb = resp[0];
   var userCode = resp[1];
-  this._suppressUpdates = true;
-  var self = this;
   this.state = 'disarming';
   cb();
   
+  var self = this;
   this._soap._client.DisarmSecuritySystem({
     SessionID: this._soap._sessionID,
     LocationID: this.LocationID,
@@ -120,50 +101,17 @@ HoneywellTotalConnectSecurity.prototype.disarm = function() {
     UserCode: userCode
   }, function(err, result, raw, soapHeader) {
     var resultCode = result.DisarmSecuritySystemResult.ResultCode;
-    if (resultCode === 0) {
-      self.state = 'disarmed';
-      cb();
-      self._suppressUpdates = false;
-    } else if (resultCode > 0) {
-      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'disarmed', callback: cb});
-    } else {
+    if (resultCode < 0) {
       self.state = previousState;
       cb();
-      self._suppressUpdates = false;
     }
   });
 }
 
 HoneywellTotalConnectSecurity.prototype.updateState = function(newState, cb) {
-  if (this._suppressUpdates === true) {
-    return;
-  } else {
-    this.state = newState;
-    cb();
-  }
-}
-
-HoneywellTotalConnectSecurity.prototype._checkSecurityPanelLastCommandState = function(arg) {
-  var self = this;
-  this._soap._client.CheckSecurityPanelLastCommandState({
-    SessionID: this._soap._sessionID,
-    LocationID: this.LocationID,
-    DeviceID: this.DeviceID,
-    CommandCode: -1
-  }, function(err, result, raw, soapHeader) {
-    var resultCode = result.CheckSecurityPanelLastCommandStateResult.ResultCode;
-    if (resultCode == 0) {
-      self.state = arg.nextState;
-      arg.callback();
-      self._suppressUpdates = false;
-    } else if (resultCode < 0 ) {
-      self.state = arg.previousState;
-      arg.callback();
-      self._suppressUpdates = false;
-    } else {
-      setTimeout(self._checkSecurityPanelLastCommandState.bind(self), FAST_TIMEOUT, arg);
-    }
-  });
+  console.log('newState: ' + newState);
+  this.state = newState;
+  cb();
 }
 
 HoneywellTotalConnectSecurity.prototype._setArmingState = function(armingState) {
@@ -194,8 +142,11 @@ HoneywellTotalConnectSecurity.prototype._setArmingState = function(armingState) 
 }
 
 HoneywellTotalConnectSecurity.prototype._getPanelMetaDataAndFullStatusByDeviceID = function() {
-  this._soap._getPanelMetaDataAndFullStatusByDeviceID(this.DeviceID, this._lastUpdatedTimestampTicks, 
-    this._lastSequenceNumber, this._getPanelMetaDataAndFullStatusByDeviceIDCallback.bind(this));
+  this._soap._getPanelMetaDataAndFullStatusByDeviceID(this.DeviceID,
+    this._lastUpdatedTimestampTicks,
+    this._lastSequenceNumber,
+    this._getPanelMetaDataAndFullStatusByDeviceIDCallback.bind(this));
+
   this._lastUpdatedTimestampTicks = this._soap._ticks();
 }
 
@@ -220,7 +171,11 @@ HoneywellTotalConnectSecurity.prototype._getPanelMetaDataAndFullStatusByDeviceID
 }
 
 HoneywellTotalConnectSecurity.prototype._getPanelFullStatusByDeviceID = function() {
-  this._soap._getPanelFullStatusByDeviceID(this.DeviceID, this._lastUpdatedTimestampTicks, this._lastSequenceNumber, this._getPanelFullStatusByDeviceIDCallback.bind(this));
+  this._soap._getPanelFullStatusByDeviceID(this.DeviceID,
+    this._lastUpdatedTimestampTicks,
+    this._lastSequenceNumber,
+    this._getPanelFullStatusByDeviceIDCallback.bind(this));
+
   this._lastUpdatedTimestampTicks = this._soap._ticks();
 }
 

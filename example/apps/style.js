@@ -12,13 +12,15 @@ module.exports = function(server) {
   ['security'].forEach(function(deviceType){
     var deviceQuery = server.where({ type: deviceType});
     server.observe([deviceQuery], function(device) {
+      device.style = extend(true, device.style, {properties: {}, actions: {}});
+      device.style.actions = {'update-state-image': {display: 'none'}, 'update-state': {display: 'none'}};
       var states = Object.keys(device._allowed);
       for (i = 0; i < states.length; i++) {
         device._allowed[states[i]].push('update-state-image');
       }
       device._transitions['update-state-image'] = {
         handler: function(updatedStateImage, cb) {
-          this.style = extend(this.style, {stateImage: updatedStateImage});
+          device.style.properties = extend(device.style.properties, {stateImage: {url: updatedStateImage}});
           cb();
         },
         fields: [

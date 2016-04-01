@@ -16,16 +16,8 @@ var HoneywellTotalConnectSecurity = module.exports = function() {
 };
 util.inherits(HoneywellTotalConnectSecurity, HoneywellDevice);
 
-// TODO: check the actual status of the panel then set current state
 HoneywellTotalConnectSecurity.prototype.init = function(config) {
 
-  // GetPanelFullStatusByDeviceID
-  // ArmingState: 10200 -> Disarmed
-  // ArmingState: 10201 -> Armed Away
-  // ArmingState: 10203 -> Armed Stay
-  // ArmingState: 10307 -> Arming (Stay & Away)
-  // ArmingState: 10308 -> Disarming
-  
   var armingFields = [];
   if (1 === Number(this.PromptForUserCode)) {
     armingFields = [{name: 'UserCode', type: 'text'}];
@@ -48,6 +40,131 @@ HoneywellTotalConnectSecurity.prototype.init = function(config) {
     this._getPanelMetaDataAndFullStatusByDeviceID();
 };
 
+HoneywellTotalConnectSecurity.prototype.armStay = function() {
+  var previousState = this.state;
+  var resp = this._parseUserCode(arguments);
+  var cb = resp[0];
+  var userCode = resp[1];
+  this._suppressUpdates = true;
+  this.state = 'arming';
+  cb();
+
+  var self = this;
+  this._soap._client.ArmSecuritySystem({
+    SessionID: this._soap._sessionID,
+    LocationID: this.LocationID,
+    DeviceID: this.DeviceID,
+    ArmType: 1,
+    UserCode: userCode
+  }, function(err, result, raw, soapHeader) {
+    if (result.ArmSecuritySystemResult.ResultCode === 0) {
+      self.state = 'armed-stay';
+      cb();
+      self._suppressUpdates = false;
+    } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
+      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-stay', callback: cb});
+    } else {
+      self.state = previousState;
+      cb();
+      self._suppressUpdates = false;
+    }
+  });
+  
+}
+
+HoneywellTotalConnectSecurity.prototype.armAway = function() {
+  var previousState = this.state;
+  var resp = this._parseUserCode(arguments);
+  var cb = resp[0];
+  var userCode = resp[1];
+  this._suppressUpdates = true;
+  this.state = 'arming';
+  cb();
+
+  var self = this;
+  this._soap._client.ArmSecuritySystem({
+    SessionID: this._soap._sessionID,
+    LocationID: this.LocationID,
+    DeviceID: this.DeviceID,
+    ArmType: 0,
+    UserCode: userCode
+  }, function(err, result, raw, soapHeader) {
+    if (result.ArmSecuritySystemResult.ResultCode === 0) {
+      self.state = 'armed-away';
+      cb();
+      self._suppressUpdates = false;
+    } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
+      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-away', callback: cb});
+    } else {
+      self.state = previousState;
+      cb();
+      self._suppressUpdates = false;
+    }
+  });
+}
+
+HoneywellTotalConnectSecurity.prototype.disarm = function() {
+  var previousState = this.state;
+  var resp = this._parseUserCode(arguments);
+  var cb = resp[0];
+  var userCode = resp[1];
+  this._suppressUpdates = true;
+  var self = this;
+  this.state = 'disarming';
+  cb();
+  
+  this._soap._client.DisarmSecuritySystem({
+    SessionID: this._soap._sessionID,
+    LocationID: this.LocationID,
+    DeviceID: this.DeviceID,
+    UserCode: userCode
+  }, function(err, result, raw, soapHeader) {
+    var resultCode = result.DisarmSecuritySystemResult.ResultCode;
+    if (resultCode === 0) {
+      self.state = 'disarmed';
+      cb();
+      self._suppressUpdates = false;
+    } else if (resultCode > 0) {
+      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'disarmed', callback: cb});
+    } else {
+      self.state = previousState;
+      cb();
+      self._suppressUpdates = false;
+    }
+  });
+}
+
+HoneywellTotalConnectSecurity.prototype.updateState = function(newState, cb) {
+  if (this._suppressUpdates === true) {
+    return;
+  } else {
+    this.state = newState;
+    cb();
+  }
+}
+
+HoneywellTotalConnectSecurity.prototype._checkSecurityPanelLastCommandState = function(arg) {
+  var self = this;
+  this._soap._client.CheckSecurityPanelLastCommandState({
+    SessionID: this._soap._sessionID,
+    LocationID: this.LocationID,
+    DeviceID: this.DeviceID,
+    CommandCode: -1
+  }, function(err, result, raw, soapHeader) {
+    var resultCode = result.CheckSecurityPanelLastCommandStateResult.ResultCode;
+    if (resultCode == 0) {
+      self.state = arg.nextState;
+      arg.callback();
+      self._suppressUpdates = false;
+    } else if (resultCode < 0 ) {
+      self.state = arg.previousState;
+      arg.callback();
+      self._suppressUpdates = false;
+    } else {
+      setTimeout(self._checkSecurityPanelLastCommandState.bind(self), FAST_TIMEOUT, arg);
+    }
+  });
+}
 
 HoneywellTotalConnectSecurity.prototype._setArmingState = function(armingState) {
   var newState = null;
@@ -77,268 +194,66 @@ HoneywellTotalConnectSecurity.prototype._setArmingState = function(armingState) 
 }
 
 HoneywellTotalConnectSecurity.prototype._getPanelMetaDataAndFullStatusByDeviceID = function() {
-  console.log('_getPanelMetaDataAndFullStatusByDeviceID this._lastSequenceNumber: ' + this._lastSequenceNumber);
-  this._soap._getPanelMetaDataAndFullStatusByDeviceID(this.DeviceID, this._lastUpdatedTimestampTicks, this._lastSequenceNumber, this._getPanelMetaDataAndFullStatusByDeviceIDCallback.bind(this));
+  this._soap._getPanelMetaDataAndFullStatusByDeviceID(this.DeviceID, this._lastUpdatedTimestampTicks, 
+    this._lastSequenceNumber, this._getPanelMetaDataAndFullStatusByDeviceIDCallback.bind(this));
   this._lastUpdatedTimestampTicks = this._soap._ticks();
 }
 
 HoneywellTotalConnectSecurity.prototype._getPanelMetaDataAndFullStatusByDeviceIDCallback = function(err, result, raw, soapHeader) {
-  
   if (err) {
-    console.log('err _getPanelMetaDataAndFullStatusByDeviceIDCallback');
     return;
   }
   
   switch (result.GetPanelMetaDataAndFullStatusByDeviceIDResult.ResultCode) {
   case 0:
-    console.log('0: _getPanelMetaDataAndFullStatusByDeviceIDCallback: ' + util.inspect(result.GetPanelMetaDataAndFullStatusByDeviceIDResult.PanelMetadataAndStatus));
-
     var attributes = result.GetPanelMetaDataAndFullStatusByDeviceIDResult.PanelMetadataAndStatus.attributes;
     this._lastSequenceNumber = attributes.ConfigurationSequenceNumber;
     this.IsInACLoss = attributes.IsInACLoss;
     this.IsInLowBattery = attributes.IsInLowBattery;
-
     var armingState = result.GetPanelMetaDataAndFullStatusByDeviceIDResult.PanelMetadataAndStatus.Partitions.PartitionInfo[0].ArmingState;
-    console.log('metadataAndFull armingState: ' + armingState);
     this._setArmingState(armingState);
-    
     setTimeout(this._getPanelFullStatusByDeviceID.bind(this), TIMEOUT);
-    
     break;
   default:
-    console.log('default: _getPanelMetaDataAndFullStatusByDeviceIDCallback: ' + util.inspect(result));
     break;
   }
 }
 
 HoneywellTotalConnectSecurity.prototype._getPanelFullStatusByDeviceID = function() {
-  console.log('_getPanelFullStatusByDeviceID this._lastSequenceNumber: ' + this._lastSequenceNumber);
   this._soap._getPanelFullStatusByDeviceID(this.DeviceID, this._lastUpdatedTimestampTicks, this._lastSequenceNumber, this._getPanelFullStatusByDeviceIDCallback.bind(this));
   this._lastUpdatedTimestampTicks = this._soap._ticks();
 }
 
 HoneywellTotalConnectSecurity.prototype._getPanelFullStatusByDeviceIDCallback = function(err, result, raw, soapHeader) {
   if (err) {
-    console.log('err _getPanelFullStatusByDeviceIDCallback');
     return;
   }
-  
-  console.log('client.getStatusCallback: ' + util.inspect(result));
   switch (result.GetPanelFullStatusByDeviceIDResult.ResultCode) {
   case 0:
     var attributes = result.GetPanelFullStatusByDeviceIDResult.PanelStatus.attributes;
     this._lastSequenceNumber = attributes.ConfigurationSequenceNumber;
     this.IsInACLoss = attributes.IsInACLoss;
     this.IsInLowBattery = attributes.IsInLowBattery;
-    
     var armingState = result.GetPanelFullStatusByDeviceIDResult.PanelStatus.Partitions.PartitionInfo[0].ArmingState;
     this._setArmingState(armingState);
-    console.log('full armingState: ' + armingState);
-
     setTimeout(this._getPanelFullStatusByDeviceID.bind(this), TIMEOUT);
     break;
   case 4002:
     this._getPanelMetaDataAndFullStatusByDeviceID();
     break;
   default:
-    console.log('_getPanelFullStatusByDeviceIDCallback: ' + util.inspect(result.GetPanelFullStatusByDeviceIDResult.PanelStatus));
     break;
   }
 }
 
-HoneywellTotalConnectSecurity.prototype.updateState = function(newState, cb) {
-  if (this._suppressUpdates === true) {
-    return;
-  } else {
-    this.state = newState;
-    cb();
-  }
-}
-
-HoneywellTotalConnectSecurity.prototype.armStay = function() {
-  this._suppressUpdates = true;
-  
+HoneywellTotalConnectSecurity.prototype._parseUserCode = function(args) {
+  var userCode = -1;
   var cb = null;
-  var userCode = null;
-
-  if (typeof arguments[0] === 'function') {
-    cb = arguments[0];
+  if (typeof args[0] === 'function') {
+    cb = args[0];
   } else {
-    userCode = arguments[0]
-    cb = arguments[1];
+    userCode = Number(args[0]);
+    cb = args[1];
   }
-
-  console.log('armStay');
-  
-  var self = this;
-
-  var previousState = this.state;
-  this.state = 'arming';
-  cb();
-
-  console.log('this._soap._sessionID: ' + this._soap._sessionID);
-  console.log('this.LocationID: ' + this.LocationID);
-  console.log('this.DeviceID: ' + this.DeviceID);
-  
-  if (Number(userCode) <= 0 ) {
-    userCode = -1;
-  }
-  
-  this._soap._client.ArmSecuritySystem({
-    SessionID: this._soap._sessionID,
-    LocationID: this.LocationID,
-    DeviceID: this.DeviceID,
-    ArmType: 1,
-    UserCode: userCode
-  }, function(err, result, raw, soapHeader) {
-    // TODO: handle err
-    console.log('armStay: ' + util.inspect(result));
-    if (result.ArmSecuritySystemResult.ResultCode === 0) {
-      self.state = 'armed-stay';
-      cb();
-      self._suppressUpdates = false;
-    } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
-      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-stay', callback: cb});
-    } else {
-      // log an err?
-      self.state = previousState;
-      cb();
-      self._suppressUpdates = false;
-      console.log('armAway: ERROR: result.ArmSecuritySystemResult.ResultCode: ' + result.ArmSecuritySystemResult.ResultCode);
-    }
-  });
-  
-}
-
-HoneywellTotalConnectSecurity.prototype.armAway = function() {
-  this._suppressUpdates = true;
-
-  var cb = null;
-  var userCode = null;
-
-  if (typeof arguments[0] === 'function') {
-    cb = arguments[0];
-  } else {
-    userCode = arguments[0]
-    cb = arguments[1];
-  }
-
-  console.log('armAway');
-
-  var self = this;
-
-  var previousState = this.state;
-  this.state = 'arming';
-  cb();
-
-  if (Number(userCode) <= 0 ) {
-    userCode = -1;
-  }
-  
-  this._soap._client.ArmSecuritySystem({
-    SessionID: this._soap._sessionID,
-    LocationID: this.LocationID,
-    DeviceID: this.DeviceID,
-    ArmType: 0,
-    UserCode: userCode
-  }, function(err, result, raw, soapHeader) {
-    // TODO: handle err
-    console.log('armAway: ' + util.inspect(result));
-    if (result.ArmSecuritySystemResult.ResultCode === 0) {
-      self.state = 'armed-away';
-      cb();
-      self._suppressUpdates = false;
-    } else if (result.ArmSecuritySystemResult.ResultCode > 0) {
-      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'armed-away', callback: cb});
-    } else {
-      // log an err?
-      self.state = previousState;
-      cb();
-      self._suppressUpdates = false;
-      console.log('armAway: ERROR: result.ArmSecuritySystemResult.ResultCode: ' + result.ArmSecuritySystemResult.ResultCode);
-    }
-  });
-}
-
-HoneywellTotalConnectSecurity.prototype.disarm = function() {
-
-  console.log('_isValidSession (false): ' + this._isValidSession('1234'));
-  console.log('_isValidSession (true): ' + this._isValidSession(this._soap._sessionID));
-
-  this._suppressUpdates = true;
-
-  var cb = null;
-  var userCode = null;
-
-  if (typeof arguments[0] === 'function') {
-    cb = arguments[0];
-  } else {
-    userCode = arguments[0]
-    cb = arguments[1];
-  }
-
-  console.log('disarm');
-  
-  var self = this;
-  
-  var previousState = this.state;
-  this.state = 'disarming';
-  cb();
-  
-  if (Number(userCode) <= 0 ) {
-    userCode = -1;
-  }
-  
-  this._soap._client.DisarmSecuritySystem({
-    SessionID: this._soap._sessionID,
-    LocationID: this.LocationID,
-    DeviceID: this.DeviceID,
-    UserCode: userCode
-  }, function(err, result, raw, soapHeader) {
-    var resultCode = result.DisarmSecuritySystemResult.ResultCode;
-    if (resultCode === 0) {
-      console.log('result.DisarmSecuritySystemResult: ' + result.DisarmSecuritySystemResult);
-      self.state = 'disarmed';
-      cb();
-      self._suppressUpdates = false;
-    } else if (resultCode > 0) {
-      self._checkSecurityPanelLastCommandState({previousState: previousState, nextState: 'disarmed', callback: cb});
-    } else {
-      // log an err?
-      self.state = previousState;
-      cb();
-      self._suppressUpdates = false;
-      console.log('disarm: ERROR: result.DisarmSecuritySystemResult.ResultCode: ' + result.DisarmSecuritySystemResult.ResultCode);
-    }
-  });
-
-}
-
-HoneywellTotalConnectSecurity.prototype._checkSecurityPanelLastCommandState = function(arg) {
-  console.log('CheckSecurityPanelLastCommandState');
-  var self = this;
-  this._soap._client.CheckSecurityPanelLastCommandState({
-    SessionID: this._soap._sessionID,
-    LocationID: this.LocationID,
-    DeviceID: this.DeviceID,
-    CommandCode: -1
-  }, function(err, result, raw, soapHeader) {
-    console.log('_checkSecurityPanelLastCommandState: ' + util.inspect(result));
-    var resultCode = result.CheckSecurityPanelLastCommandStateResult.ResultCode;
-    console.log('_checkSecurityPanelLastCommandState resultCode: ' + resultCode);
-    if (resultCode == 0) {
-      self.state = arg.nextState;
-      arg.callback();
-      self._suppressUpdates = false;
-      // success
-    } else if (resultCode < 0 ) {
-      self.state = arg.previousState;
-      arg.callback();
-      self._suppressUpdates = false;
-      console.log(result.CheckSecurityPanelLastCommandStateResult.ResultData);
-    } else {
-      // TODO: handle err state and setting Zetta state
-      setTimeout(self._checkSecurityPanelLastCommandState.bind(self), FAST_TIMEOUT, arg);
-    }
-  });
+  return [cb, userCode];
 }

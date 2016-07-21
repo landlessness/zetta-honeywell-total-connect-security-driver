@@ -24,16 +24,16 @@ HoneywellTotalConnectSecurity.prototype.init = function(config) {
   config
     .name(this.DeviceName)
     .type('security')
-    .when(null, {allow: ['update-state']})
-    .when('disarmed', {allow: ['arm-stay', 'arm-away', 'update-state']})
-    .when('armed-stay', {allow: ['disarm', 'update-state']})
-    .when('armed-away', {allow: ['disarm', 'update-state']})
-    .when('arming', {allow: ['update-state']})
-    .when('disarming', {allow: ['update-state']})
+    .when(null, {allow: ['_update-state']})
+    .when('disarmed', {allow: ['arm-stay', 'arm-away', '_update-state']})
+    .when('armed-stay', {allow: ['disarm', '_update-state']})
+    .when('armed-away', {allow: ['disarm', '_update-state']})
+    .when('arming', {allow: ['_update-state']})
+    .when('disarming', {allow: ['_update-state']})
     .map('arm-stay', this.armStay, armingFields)
     .map('arm-away', this.armAway, armingFields)
     .map('disarm', this.disarm, armingFields)
-    .map('update-state', this.updateState, [{name: 'newState', type: 'text'}]);
+    .map('_update-state', this.updateState, [{name: 'newState', type: 'text'}]);
     
   this._getPanelMetaDataAndFullStatusByDeviceID();
 };
@@ -116,28 +116,12 @@ HoneywellTotalConnectSecurity.prototype.updateState = function(newState, cb) {
 
 HoneywellTotalConnectSecurity.prototype._setArmingState = function(armingState) {
   var newState = null;
-  switch (armingState) {
-  case 10200:
-    newState = 'disarmed';
-    break;
-  case 10201:
-    newState = 'armed-away';
-    break;
-  case 10203:
-    newState = 'armed-stay';
-    break;
-  case 10307:
-    newState = 'arming'
-    break;
-  case 10308:
-    newState = 'disarming'
-    break;
-  }
-  
+  var stateForCode = {10200:'disarmed',10201:'armed-away',10203:'armed-stay',10307:'arming',10308:'disarming'};
+  newState = stateForCode[armingState];
   if (newState === this.state) {
     return;
   } else {
-    this.call('update-state', newState);
+    this.call('_update-state', newState);
   }
 }
 
